@@ -24,6 +24,7 @@
     <ProjectGuid>{fa7386fa-d79d-445e-bb38-5ed87c2f6fe0}</ProjectGuid>
     <RootNamespace>DVDCHAOS</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>Invisiball</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
