@@ -1,0 +1,15 @@
+.vs/
+*.VC.db
+*.sqlite
+*.user
+*.log
+*.json
+
+Debug/
+Release/
+x64/
+x86/
+
+*.obj
+*.exe
+*.pdb
