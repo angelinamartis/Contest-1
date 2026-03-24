@@ -126,6 +126,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <MASM Include="test1.asm" />
+    <MASM Include="test2.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
