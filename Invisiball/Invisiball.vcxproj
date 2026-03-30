@@ -127,9 +127,6 @@
     <MASM Include="test1.asm">
       <FileType>Document</FileType>
     </MASM>
-    <MASM Include="test2.asm">
-      <FileType>Document</FileType>
-    </MASM>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
