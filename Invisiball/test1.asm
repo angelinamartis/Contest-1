@@ -1,401 +1,501 @@
-.386
-.model flat, stdcall
-option casemap:none
-
-include windows.inc
-include user32.inc
-include kernel32.inc
-include gdi32.inc
-
-includelib user32.lib
-includelib kernel32.lib
-includelib gdi32.lib
-
-WinMain PROTO :DWORD,:DWORD,:DWORD,:DWORD
-WndProc  PROTO :DWORD,:DWORD,:DWORD,:DWORD
-
-CELL_SIZE equ 50
-ROWS      equ 6
-COLS      equ 6
-
-VK_LEFT_K  equ 25h
-VK_UP_K    equ 26h
-VK_RIGHT_K equ 27h
-VK_DOWN_K  equ 28h
+INCLUDE Irvine32.inc
+includelib Irvine32.lib
 
 .data
-ClassName db "MazeClass",0
-AppTitle  db "Invisiball",0
-WinMsg    db "You reached the end!",0
+titleMsg BYTE "Reach E. Hit a wall and restart.",0
+normalWinMsg BYTE "WOW didnt expect that <3",0
+easyWinMsg BYTE "thanks for trying ig...",0
 
-playerRow dd 0
-playerCol dd 0
-goalRow   dd 5
-goalCol   dd 5
+attempts BYTE 0
+easyMode BYTE 0
+moveCount BYTE 0
 
-; 0=open, 1=wall
-maze db \
-0,0,1,0,0,0,\
-1,0,1,0,1,0,\
-0,0,0,0,1,0,\
-0,1,1,0,0,0,\
-0,0,0,1,1,0,\
-1,1,0,0,0,0
+playerX BYTE 1
+playerY BYTE 1
 
-wc  WNDCLASSEX <>
-msg MSG <>
-ps  PAINTSTRUCT <>
+; ---------------- NORMAL MAZE ----------------
+maze0  BYTE "--------------------------",0
+maze1  BYTE "|              |         |",0
+maze2  BYTE "|  +----+  +---+   +-----|",0
+maze3  BYTE "|  |    |  |       |     |",0
+maze4  BYTE "|     +-+  |  ++      +  |",0
+maze5  BYTE "|  +--|    |   |   |  |  |",0
+maze6  BYTE "|  |  +--------|   +--+  |",0
+maze7  BYTE "|     |        |   |     |",0
+maze8  BYTE "|--+  +---+  +-+   |  ---|",0
+maze9  BYTE "|  |               |     |",0
+maze10 BYTE "|  |  +---+  +-----|---  |",0
+maze11 BYTE "|     |      | E         |",0
+maze12 BYTE "--------------------------",0
+
+; ---------------- EASY MAZE ----------------
+easy0  BYTE "--------------------------",0
+easy1  BYTE "| E                      |",0
+easy2  BYTE "|                        |",0
+easy3  BYTE "|                        |",0
+easy4  BYTE "|                        |",0
+easy5  BYTE "|                        |",0
+easy6  BYTE "|                        |",0
+easy7  BYTE "|                        |",0
+easy8  BYTE "|                        |",0
+easy9  BYTE "|                        |",0
+easy10 BYTE "|                        |",0
+easy11 BYTE "|                        |",0
+easy12 BYTE "--------------------------",0
 
 .code
+main PROC
+    call RedrawScreen
+    call GameLoop
+    exit
+main ENDP
 
-start:
-    invoke GetModuleHandle, NULL
-    invoke WinMain, eax, NULL, NULL, SW_SHOWDEFAULT
-    invoke ExitProcess, eax
+GameLoop PROC
+L1:
+    call ReadKey
 
-WinMain PROC hInst:DWORD, hPrev:DWORD, lpCmd:DWORD, nShow:DWORD
+    cmp ah,48h
+    je GoUp
+    cmp ah,50h
+    je GoDown
+    cmp ah,4Bh
+    je GoLeft
+    cmp ah,4Dh
+    je GoRight
+    jmp L1
 
-    mov wc.cbSize, SIZEOF WNDCLASSEX
-    mov wc.style, CS_HREDRAW or CS_VREDRAW
-    mov wc.lpfnWndProc, OFFSET WndProc
-    mov wc.cbClsExtra, 0
-    mov wc.cbWndExtra, 0
-    mov eax, hInst
-    mov wc.hInstance, eax
-    invoke LoadIcon, NULL, IDI_APPLICATION
-    mov wc.hIcon, eax
-    mov wc.hIconSm, eax
-    invoke LoadCursor, NULL, IDC_ARROW
-    mov wc.hCursor, eax
-    invoke GetStockObject, WHITE_BRUSH
-    mov wc.hbrBackground, eax
-    mov wc.lpszMenuName, NULL
-    mov wc.lpszClassName, OFFSET ClassName
+GoUp:
+    mov bl,playerX
+    mov bh,playerY
+    dec bh
+    call TryMove
+    jmp CheckWin
 
-    invoke RegisterClassEx, ADDR wc
+GoDown:
+    mov bl,playerX
+    mov bh,playerY
+    inc bh
+    call TryMove
+    jmp CheckWin
 
-    invoke CreateWindowEx,\
-        0,\
-        ADDR ClassName,\
-        ADDR AppTitle,\
-        WS_OVERLAPPEDWINDOW,\
-        CW_USEDEFAULT,\
-        CW_USEDEFAULT,\
-        340,\
-        370,\
-        NULL,\
-        NULL,\
-        hInst,\
-        NULL
+GoLeft:
+    mov bl,playerX
+    mov bh,playerY
+    dec bl
+    call TryMove
+    jmp CheckWin
 
-    mov ebx, eax
+GoRight:
+    mov bl,playerX
+    mov bh,playerY
+    inc bl
+    call TryMove
+    jmp CheckWin
 
-    invoke ShowWindow, ebx, SW_SHOWNORMAL
-    invoke UpdateWindow, ebx
+CheckWin:
+    mov bl,playerX
+    mov bh,playerY
+    call GetMazeChar
+    cmp al,'E'
+    jne L1
 
-msg_loop:
-    invoke GetMessage, ADDR msg, NULL, 0, 0
-    cmp eax, 0
-    je end_loop
-    invoke TranslateMessage, ADDR msg
-    invoke DispatchMessage, ADDR msg
-    jmp msg_loop
+    mov dh,15
+    mov dl,0
+    call Gotoxy
 
-end_loop:
-    mov eax, msg.wParam
+    mov al,easyMode
+    cmp al,1
+    je ShowEasyWin
+
+    mov edx,OFFSET normalWinMsg
+    jmp ShowWinMsg
+
+ShowEasyWin:
+    mov edx,OFFSET easyWinMsg
+
+ShowWinMsg:
+    call WriteString
+    call ReadChar
+    ret
+GameLoop ENDP
+
+TryMove PROC USES eax
+    call GetMazeChar
+
+    cmp al,'|'
+    je HitWall
+    cmp al,'-'
+    je HitWall
+    cmp al,'+'
+    je HitWall
+
+    mov playerX,bl
+    mov playerY,bh
+
+    mov al,moveCount
+    inc al
+    mov moveCount,al
+
+    call RedrawScreen
     ret
 
-WinMain ENDP
+HitWall:
+    mov al,attempts
+    inc al
+    mov attempts,al
 
-WndProc PROC hWnd:DWORD, uMsg:DWORD, wParam:DWORD, lParam:DWORD
-    LOCAL hdc:DWORD
-    LOCAL row:DWORD
-    LOCAL col:DWORD
-    LOCAL x1:DWORD
-    LOCAL y1:DWORD
-    LOCAL x2:DWORD
-    LOCAL y2:DWORD
-    LOCAL idx:DWORD
-    LOCAL newRow:DWORD
-    LOCAL newCol:DWORD
-    LOCAL hPen:DWORD
-    LOCAL hBrushWall:DWORD
-    LOCAL hBrushBall:DWORD
-    LOCAL hBrushGoal:DWORD
-    LOCAL hBrushStart:DWORD
-    LOCAL oldObj:DWORD
+    cmp al,2
+    jl ResetPlayer
 
-    cmp uMsg, WM_DESTROY
-    je do_destroy
+    mov easyMode,1
 
-    cmp uMsg, WM_KEYDOWN
-    je do_key
+ResetPlayer:
+    mov playerX,1
+    mov playerY,1
+    mov moveCount,0
+    call RedrawScreen
+    ret
+TryMove ENDP
 
-    cmp uMsg, WM_PAINT
-    je do_paint
+RedrawScreen PROC
+    call Clrscr
+    call DrawCurrentMaze
+    call DrawTitle
+    call DrawPlayer
+    ret
+RedrawScreen ENDP
 
-default_msg:
-    invoke DefWindowProc, hWnd, uMsg, wParam, lParam
+DrawTitle PROC
+    mov dh,14
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET titleMsg
+    call WriteString
+    ret
+DrawTitle ENDP
+
+DrawCurrentMaze PROC
+    mov al,easyMode
+    cmp al,1
+    je DrawEasyMaze
+
+    mov dh,0
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze0
+    call WriteString
+
+    mov dh,1
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze1
+    call WriteString
+
+    mov dh,2
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze2
+    call WriteString
+
+    mov dh,3
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze3
+    call WriteString
+
+    mov dh,4
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze4
+    call WriteString
+
+    mov dh,5
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze5
+    call WriteString
+
+    mov dh,6
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze6
+    call WriteString
+
+    mov dh,7
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze7
+    call WriteString
+
+    mov dh,8
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze8
+    call WriteString
+
+    mov dh,9
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze9
+    call WriteString
+
+    mov dh,10
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze10
+    call WriteString
+
+    mov dh,11
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze11
+    call WriteString
+
+    mov dh,12
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET maze12
+    call WriteString
     ret
 
-do_destroy:
-    invoke PostQuitMessage, 0
-    xor eax, eax
+DrawEasyMaze:
+    mov dh,0
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy0
+    call WriteString
+
+    mov dh,1
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy1
+    call WriteString
+
+    mov dh,2
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy2
+    call WriteString
+
+    mov dh,3
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy3
+    call WriteString
+
+    mov dh,4
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy4
+    call WriteString
+
+    mov dh,5
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy5
+    call WriteString
+
+    mov dh,6
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy6
+    call WriteString
+
+    mov dh,7
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy7
+    call WriteString
+
+    mov dh,8
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy8
+    call WriteString
+
+    mov dh,9
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy9
+    call WriteString
+
+    mov dh,10
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy10
+    call WriteString
+
+    mov dh,11
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy11
+    call WriteString
+
+    mov dh,12
+    mov dl,0
+    call Gotoxy
+    mov edx,OFFSET easy12
+    call WriteString
     ret
+DrawCurrentMaze ENDP
 
-do_key:
-    ; copy current position
-    mov eax, playerRow
-    mov newRow, eax
-    mov eax, playerCol
-    mov newCol, eax
+DrawPlayer PROC
+    mov al,moveCount
+    cmp al,1
+    ja HidePlayer
 
-    ; LEFT
-    cmp wParam, VK_LEFT_K
-    jne check_right
-    cmp newCol, 0
-    je key_done
-    dec newCol
-    jmp try_move
+    mov dh,playerY
+    mov dl,playerX
+    call Gotoxy
+    mov al,'O'
+    call WriteChar
 
-check_right:
-    cmp wParam, VK_RIGHT_K
-    jne check_up
-    cmp newCol, COLS-1
-    je key_done
-    inc newCol
-    jmp try_move
-
-check_up:
-    cmp wParam, VK_UP_K
-    jne check_down
-    cmp newRow, 0
-    je key_done
-    dec newRow
-    jmp try_move
-
-check_down:
-    cmp wParam, VK_DOWN_K
-    jne key_done
-    cmp newRow, ROWS-1
-    je key_done
-    inc newRow
-
-try_move:
-    ; idx = newRow * COLS + newCol
-    mov eax, newRow
-    imul eax, COLS
-    add eax, newCol
-    mov idx, eax
-
-    mov esi, OFFSET maze
-    add esi, idx
-    movzx eax, byte ptr [esi]
-    cmp eax, 1
-    je key_done
-
-    ; valid move
-    mov eax, newRow
-    mov playerRow, eax
-    mov eax, newCol
-    mov playerCol, eax
-
-    invoke InvalidateRect, hWnd, NULL, TRUE
-
-    ; win check
-    mov eax, playerRow
-    cmp eax, goalRow
-    jne key_done
-    mov eax, playerCol
-    cmp eax, goalCol
-    jne key_done
-
-    invoke MessageBox, hWnd, ADDR WinMsg, ADDR AppTitle, MB_OK
-
-key_done:
-    xor eax, eax
+HidePlayer:
     ret
+DrawPlayer ENDP
 
-do_paint:
-    invoke BeginPaint, hWnd, ADDR ps
-    mov hdc, eax
+GetMazeChar PROC USES edx
+    mov al,easyMode
+    cmp al,1
+    je EasyRows
 
-    invoke CreatePen, PS_SOLID, 1, 00000000h
-    mov hPen, eax
-    invoke SelectObject, hdc, hPen
+NormalRows:
+    cmp bh,0
+    je N0
+    cmp bh,1
+    je N1
+    cmp bh,2
+    je N2
+    cmp bh,3
+    je N3
+    cmp bh,4
+    je N4
+    cmp bh,5
+    je N5
+    cmp bh,6
+    je N6
+    cmp bh,7
+    je N7
+    cmp bh,8
+    je N8
+    cmp bh,9
+    je N9
+    cmp bh,10
+    je N10
+    cmp bh,11
+    je N11
+    jmp N12
 
-    invoke CreateSolidBrush, 00C0C0C0h
-    mov hBrushWall, eax
+EasyRows:
+    cmp bh,0
+    je E0
+    cmp bh,1
+    je E1
+    cmp bh,2
+    je E2
+    cmp bh,3
+    je E3
+    cmp bh,4
+    je E4
+    cmp bh,5
+    je E5
+    cmp bh,6
+    je E6
+    cmp bh,7
+    je E7
+    cmp bh,8
+    je E8
+    cmp bh,9
+    je E9
+    cmp bh,10
+    je E10
+    cmp bh,11
+    je E11
+    jmp E12
 
-    invoke CreateSolidBrush, 0000FF00h
-    mov hBrushGoal, eax
+N0:
+    mov edx,OFFSET maze0
+    jmp ReadCell
+N1:
+    mov edx,OFFSET maze1
+    jmp ReadCell
+N2:
+    mov edx,OFFSET maze2
+    jmp ReadCell
+N3:
+    mov edx,OFFSET maze3
+    jmp ReadCell
+N4:
+    mov edx,OFFSET maze4
+    jmp ReadCell
+N5:
+    mov edx,OFFSET maze5
+    jmp ReadCell
+N6:
+    mov edx,OFFSET maze6
+    jmp ReadCell
+N7:
+    mov edx,OFFSET maze7
+    jmp ReadCell
+N8:
+    mov edx,OFFSET maze8
+    jmp ReadCell
+N9:
+    mov edx,OFFSET maze9
+    jmp ReadCell
+N10:
+    mov edx,OFFSET maze10
+    jmp ReadCell
+N11:
+    mov edx,OFFSET maze11
+    jmp ReadCell
+N12:
+    mov edx,OFFSET maze12
+    jmp ReadCell
 
-    invoke CreateSolidBrush, 00FFFF00h
-    mov hBrushStart, eax
+E0:
+    mov edx,OFFSET easy0
+    jmp ReadCell
+E1:
+    mov edx,OFFSET easy1
+    jmp ReadCell
+E2:
+    mov edx,OFFSET easy2
+    jmp ReadCell
+E3:
+    mov edx,OFFSET easy3
+    jmp ReadCell
+E4:
+    mov edx,OFFSET easy4
+    jmp ReadCell
+E5:
+    mov edx,OFFSET easy5
+    jmp ReadCell
+E6:
+    mov edx,OFFSET easy6
+    jmp ReadCell
+E7:
+    mov edx,OFFSET easy7
+    jmp ReadCell
+E8:
+    mov edx,OFFSET easy8
+    jmp ReadCell
+E9:
+    mov edx,OFFSET easy9
+    jmp ReadCell
+E10:
+    mov edx,OFFSET easy10
+    jmp ReadCell
+E11:
+    mov edx,OFFSET easy11
+    jmp ReadCell
+E12:
+    mov edx,OFFSET easy12
 
-    invoke CreateSolidBrush, 000000FFh
-    mov hBrushBall, eax
-
-    ; draw cells
-    mov row, 0
-
-row_loop:
-    mov eax, row
-    cmp eax, ROWS
-    jge draw_lines
-
-    mov col, 0
-
-col_loop:
-    mov eax, col
-    cmp eax, COLS
-    jge next_row
-
-    ; x1 = col * CELL_SIZE
-    mov eax, col
-    imul eax, CELL_SIZE
-    mov x1, eax
-
-    ; y1 = row * CELL_SIZE
-    mov eax, row
-    imul eax, CELL_SIZE
-    mov y1, eax
-
-    mov eax, x1
-    add eax, CELL_SIZE
-    mov x2, eax
-
-    mov eax, y1
-    add eax, CELL_SIZE
-    mov y2, eax
-
-    ; idx = row * COLS + col
-    mov eax, row
-    imul eax, COLS
-    add eax, col
-    mov idx, eax
-
-    ; draw wall?
-    mov esi, OFFSET maze
-    add esi, idx
-    movzx eax, byte ptr [esi]
-    cmp eax, 1
-    jne check_start
-
-    invoke SelectObject, hdc, hBrushWall
-    mov oldObj, eax
-    invoke Rectangle, hdc, x1, y1, x2, y2
-    invoke SelectObject, hdc, oldObj
-    jmp after_special
-
-check_start:
-    mov eax, row
-    cmp eax, 0
-    jne check_goal
-    mov eax, col
-    cmp eax, 0
-    jne check_goal
-
-    invoke SelectObject, hdc, hBrushStart
-    mov oldObj, eax
-    invoke Rectangle, hdc, x1, y1, x2, y2
-    invoke SelectObject, hdc, oldObj
-    jmp after_special
-
-check_goal:
-    mov eax, row
-    cmp eax, goalRow
-    jne after_special_check
-    mov eax, col
-    cmp eax, goalCol
-    jne after_special_check
-
-    invoke SelectObject, hdc, hBrushGoal
-    mov oldObj, eax
-    invoke Rectangle, hdc, x1, y1, x2, y2
-    invoke SelectObject, hdc, oldObj
-
-after_special_check:
-after_special:
-    inc col
-    jmp col_loop
-
-next_row:
-    inc row
-    jmp row_loop
-
-draw_lines:
-    ; vertical lines
-    mov col, 0
-
-v_loop:
-    mov eax, col
-    cmp eax, COLS+1
-    jge h_lines
-
-    mov eax, col
-    imul eax, CELL_SIZE
-    mov x1, eax
-
-    invoke MoveToEx, hdc, x1, 0, NULL
-    invoke LineTo, hdc, x1, ROWS*CELL_SIZE
-
-    inc col
-    jmp v_loop
-
-h_lines:
-    mov row, 0
-
-h_loop:
-    mov eax, row
-    cmp eax, ROWS+1
-    jge draw_ball
-
-    mov eax, row
-    imul eax, CELL_SIZE
-    mov y1, eax
-
-    invoke MoveToEx, hdc, 0, y1, NULL
-    invoke LineTo, hdc, COLS*CELL_SIZE, y1
-
-    inc row
-    jmp h_loop
-
-draw_ball:
-    ; ball position inside current cell
-    mov eax, playerCol
-    imul eax, CELL_SIZE
-    add eax, 15
-    mov x1, eax
-
-    mov eax, playerRow
-    imul eax, CELL_SIZE
-    add eax, 15
-    mov y1, eax
-
-    mov eax, x1
-    add eax, 20
-    mov x2, eax
-
-    mov eax, y1
-    add eax, 20
-    mov y2, eax
-
-    invoke SelectObject, hdc, hBrushBall
-    mov oldObj, eax
-    invoke Ellipse, hdc, x1, y1, x2, y2
-    invoke SelectObject, hdc, oldObj
-
-    invoke DeleteObject, hPen
-    invoke DeleteObject, hBrushWall
-    invoke DeleteObject, hBrushGoal
-    invoke DeleteObject, hBrushStart
-    invoke DeleteObject, hBrushBall
-
-    invoke EndPaint, hWnd, ADDR ps
-    xor eax, eax
+ReadCell:
+    movzx eax,bl
+    mov al,[edx+eax]
     ret
+GetMazeChar ENDP
 
-WndProc ENDP
-
-END start
+END main
